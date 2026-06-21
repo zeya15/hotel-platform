@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-forest-950 text-stone-100;
+  }
+  h1, h2, h3, h4 {
+    @apply font-serif;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest-700 bg-white transition-colors;
+  }
+  .btn-primary {
+    @apply bg-gold-500 hover:bg-gold-400 text-white font-bold px-6 py-3 rounded-full text-sm uppercase tracking-widest transition-all shadow-md shadow-gold-600/20;
+  }
+  .btn-outline {
+    @apply border-2 border-forest-900 text-forest-900 hover:bg-forest-900 hover:text-white font-semibold px-6 py-3 rounded-full text-sm transition-all;
+  }
+  .section-label {
+    @apply text-gold-500 text-xs font-semibold uppercase tracking-[0.25em] mb-3 flex items-center gap-2;
+  }
+
+  /* Hero CTA buttons — curtain fill effect */
+  .btn-hero-primary {
+    @apply relative overflow-hidden font-bold px-8 py-4 rounded-full text-sm uppercase tracking-widest text-white;
+    background: linear-gradient(to left, #C87A53 50%, #df9975 50%);
+    background-size: 200% 100%;
+    background-position: right center;
+    box-shadow: 0 8px 32px rgba(200, 122, 83, 0.45);
+    transition: background-position 0.4s ease, box-shadow 0.3s ease, transform 0.2s ease;
+  }
+  .btn-hero-primary:hover {
+    background-position: left center;
+    box-shadow: 0 12px 40px rgba(200, 122, 83, 0.55);
+    transform: translateY(-2px) scale(1.02);
+  }
+
+  .btn-hero-outline {
+    @apply relative overflow-hidden font-medium px-8 py-4 rounded-full text-sm uppercase tracking-widest text-white;
+    background: linear-gradient(to left, transparent 50%, rgba(255,255,255,0.18) 50%);
+    background-size: 200% 100%;
+    background-position: right center;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(8px);
+    transition: background-position 0.4s ease, border-color 0.3s ease, transform 0.2s ease;
+  }
+  .btn-hero-outline:hover {
+    background-position: left center;
+    border-color: rgba(242, 196, 170, 0.7);
+    color: #f2c4aa;
+    transform: translateY(-2px) scale(1.02);
+  }
+}

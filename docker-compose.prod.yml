@@ -1,0 +1,125 @@
+# Stack de PRODUCCIÓN para el VPS.
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Diferencias vs. el compose de dev:
+#  - Sin bind-mounts ni --reload: el código se hornea en la imagen.
+#  - Frontend usa el target `runner` (Next.js standalone, build optimizado).
+#  - Solo Caddy expone puertos al host (80/443); todo lo demás es interno.
+#  - Postgres/Redis sin puertos publicados (no accesibles desde fuera del VPS).
+#  - Variables de infra (DOMAIN, ACME_EMAIL, POSTGRES_*) vienen del archivo .env de la raíz.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hoteldb}
+      POSTGRES_USER: ${POSTGRES_USER:-hoteluser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hoteluser} -d ${POSTGRES_DB:-hoteldb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # entrypoint.sh corre migraciones + seed y luego ejecuta este comando.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+  worker-critical:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      - backend
+    entrypoint: []
+    command: celery -A app.tasks.worker worker --loglevel=info --queues=critical-booking --concurrency=4
+
+  worker-notifications:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      - backend
+    entrypoint: []
+    command: celery -A app.tasks.worker worker --loglevel=info --queues=notifications --concurrency=2
+
+  worker-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      - worker-critical
+    entrypoint: []
+    command: celery -A app.tasks.worker beat --loglevel=info
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        # Vacío → el navegador llama al API en mismo origen (/api), que Caddy enruta al backend.
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_HOTEL_ID: ${NEXT_PUBLIC_HOTEL_ID:-1}
+    restart: unless-stopped
+    environment:
+      # Usado por los Server Components (SSR) para hablar con el backend dentro de la red Docker.
+      API_URL: http://backend:8000
+      NEXT_PUBLIC_HOTEL_ID: ${NEXT_PUBLIC_HOTEL_ID:-1}
+      NODE_ENV: production
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?define DOMAIN en .env}
+      ACME_EMAIL: ${ACME_EMAIL:?define ACME_EMAIL en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,23 @@
+# Caddy — reverse proxy con HTTPS automático (Let's Encrypt).
+# El dominio y el email se inyectan desde el .env del compose (DOMAIN, ACME_EMAIL).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# Todo lo que empiece con /api/ va al backend FastAPI.
+	# Cubre /api/v1/... y el webhook de ONVO:
+	#   https://{$DOMAIN}/api/v1/payments/onvo/webhook
+	@api path /api/*
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	# El resto (landing, habitaciones, admin, assets) va al frontend Next.js.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

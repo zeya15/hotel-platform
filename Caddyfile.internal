@@ -1,0 +1,27 @@
+# Caddyfile para VPS COMPARTIDO (detrás del nginx de Data Shop).
+# Caddy NO gestiona TLS aquí (lo hace el nginx de Data Shop con certbot).
+# Solo sirve HTTP en :80 dentro del contenedor y hace el split /api → backend.
+
+{
+	# Sin HTTPS automático: estamos detrás de otro proxy que ya termina TLS.
+	auto_https off
+	# Confía en los headers X-Forwarded-* que inyecta el nginx de adelante.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	encode gzip zstd
+
+	# /api/* → backend FastAPI (incluye el webhook de ONVO).
+	@api path /api/*
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	# Resto → frontend Next.js.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

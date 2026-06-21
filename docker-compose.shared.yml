@@ -1,0 +1,135 @@
+# Stack del hotel para un VPS COMPARTIDO (ya hay otro nginx ocupando 80/443).
+#   docker compose -f docker-compose.shared.yml up -d --build
+#
+# Diferencia clave vs docker-compose.prod.yml:
+#  - El Caddy del hotel NO publica 80/443. Sirve HTTP en un puerto interno
+#    (127.0.0.1:8081) y/o en una red Docker compartida con el nginx existente.
+#  - El nginx de Data Shop enruta un hostname (ej. hotel.217-216-87-116.nip.io)
+#    hacia este Caddy. Ese nginx sigue terminando TLS con su certbot.
+#
+# Cómo lo alcanza el nginx de Data Shop (elige UNA, según su setup):
+#  (a) Por puerto del host:   proxy_pass http://127.0.0.1:8081;
+#      → funciona si el nginx corre en el host. Si el nginx está en contenedor,
+#        usa la IP del bridge (típico 172.17.0.1:8081) o la opción (b).
+#  (b) Por red Docker compartida: descomenta el bloque `networks` de abajo,
+#      crea la red externa y conecta el nginx a ella → proxy_pass http://hotel-caddy:80;
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hoteldb}
+      POSTGRES_USER: ${POSTGRES_USER:-hoteluser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hoteluser} -d ${POSTGRES_DB:-hoteldb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+  worker-critical:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      - backend
+    entrypoint: []
+    command: celery -A app.tasks.worker worker --loglevel=info --queues=critical-booking --concurrency=4
+
+  worker-notifications:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      - backend
+    entrypoint: []
+    command: celery -A app.tasks.worker worker --loglevel=info --queues=notifications --concurrency=2
+
+  worker-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      - worker-critical
+    entrypoint: []
+    command: celery -A app.tasks.worker beat --loglevel=info
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_HOTEL_ID: ${NEXT_PUBLIC_HOTEL_ID:-1}
+    restart: unless-stopped
+    environment:
+      API_URL: http://backend:8000
+      NEXT_PUBLIC_HOTEL_ID: ${NEXT_PUBLIC_HOTEL_ID:-1}
+      NODE_ENV: production
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: hotel-caddy
+    restart: unless-stopped
+    # Solo expuesto al host en localhost — NO toca 80/443 (los tiene Data Shop).
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - ./Caddyfile.internal:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    # (b) Para enrutar por nombre desde el nginx de Data Shop, conecta este
+    #     Caddy a la red del nginx. Crea la red y descomenta:
+    # networks:
+    #   - edge
+
+# networks:
+#   edge:
+#     external: true
+#     name: <nombre-de-la-red-del-nginx-de-data-shop>
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
