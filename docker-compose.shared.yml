@@ -102,6 +102,7 @@ services:
     environment:
       API_URL: http://hotel-backend:8000
       NEXT_PUBLIC_HOTEL_ID: ${NEXT_PUBLIC_HOTEL_ID:-1}
+      SITE_URL: ${SITE_URL:-https://hotel.217-216-87-116.nip.io}
       NODE_ENV: production
     depends_on:
       - backend

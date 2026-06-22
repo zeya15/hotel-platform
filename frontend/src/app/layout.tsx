@@ -14,7 +14,13 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
+// Base para resolver URLs relativas en metadatos (og:image, twitter:image, etc.).
+// Sin esto, Next.js usa http://localhost:3000 por defecto y los previews al
+// compartir el link no cargan. Configurable por SITE_URL en producción.
+const SITE_URL = process.env.SITE_URL ?? "https://hotel.217-216-87-116.nip.io";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: { template: "%s — Hotel Paraíso Verde", default: "Hotel Paraíso Verde" },
   description: "Tu refugio en el corazón de Costa Rica.",
 };
