@@ -80,8 +80,9 @@ async def create_guest_booking(
         reservation.notas_internas = body.notas
 
     await db.commit()
-    await db.refresh(reservation)
-    return reservation
+    # Re-fetch with items eagerly loaded so response serialization doesn't
+    # trigger a lazy load outside the async context (MissingGreenlet).
+    return await engine.get_booking(reservation.id)
 
 
 @router.get("/public/{booking_id}", response_model=BookingPublicOut)
@@ -102,13 +103,16 @@ async def create_booking(
 ):
     engine = BookingEngine(db)
     try:
-        return await engine.create_booking(
+        reservation = await engine.create_booking(
             hotel_id=body.hotel_id,
             cliente_id=int(payload["sub"]),
             data=body,
         )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    await db.flush()
+    # Eager-load items to avoid lazy-load during response serialization.
+    return await engine.get_booking(reservation.id)
 
 
 @router.get("/{booking_id}", response_model=BookingOut)
