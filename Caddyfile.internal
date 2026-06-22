@@ -14,14 +14,18 @@
 :80 {
 	encode gzip zstd
 
+	# Nombres de contenedor ÚNICOS (hotel-backend / hotel-frontend) para evitar
+	# colisión cuando este Caddy está en una red compartida con otra app que
+	# también tiene servicios llamados "backend"/"frontend".
+
 	# /api/* → backend FastAPI (incluye el webhook de ONVO).
 	@api path /api/*
 	handle @api {
-		reverse_proxy backend:8000
+		reverse_proxy hotel-backend:8000
 	}
 
 	# Resto → frontend Next.js.
 	handle {
-		reverse_proxy frontend:3000
+		reverse_proxy hotel-frontend:3000
 	}
 }
