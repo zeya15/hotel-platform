@@ -60,7 +60,7 @@ En `backend/.env` ajusta para producción:
   que pusiste en el `.env` raíz.
 - `SECRET_KEY` → `openssl rand -hex 32`
 - `DEBUG=false` y `ENVIRONMENT=production`
-- `ALLOWED_ORIGINS=https://217-216-87-116.nip.io`
+- `ALLOWED_ORIGINS=["https://217-216-87-116.nip.io"]` (formato JSON, lista)
 - ONVO (las llaves de prueba ya están puestas):
   - `ONVO_SECRET_KEY=onvo_test_secret_key_...`
   - `ONVO_API_KEY=onvo_test_publishable_key_...`
